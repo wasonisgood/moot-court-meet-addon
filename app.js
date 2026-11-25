@@ -5,7 +5,7 @@
 
   /* ---------- 設定（部署前請改成你自己的值） ---------- */
   // Google Cloud 專案編號（Cloud console 首頁的 Project number）
-  const CLOUD_PROJECT_NUMBER = "YOUR_CLOUD_PROJECT_NUMBER";
+  const CLOUD_PROJECT_NUMBER = "1070073783084";
 
   /* ---------- 常數 ---------- */
   const SEGMENTS = [

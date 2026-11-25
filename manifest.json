@@ -2,7 +2,7 @@
   "addOns": {
     "common": {
       "name": "Moot Court Timer",
-      "logoUrl": "https://YOUR-HOST/meet-addon/logo.png",
+      "logoUrl": "https://wasonisgood.github.io/moot-court-meet-addon/logo.png",
       "layoutProperties": {
         "primaryColor": "#c9a45c",
         "secondaryColor": "#0c0e13"
@@ -10,10 +10,10 @@
     },
     "meet": {
       "web": {
-        "sidePanelUrl": "https://YOUR-HOST/meet-addon/index.html",
-        "addOnOrigins": ["https://YOUR-HOST"],
+        "sidePanelUrl": "https://wasonisgood.github.io/moot-court-meet-addon/index.html",
+        "addOnOrigins": ["https://wasonisgood.github.io"],
         "supportsScreenSharing": false,
-        "logoUrl": "https://YOUR-HOST/meet-addon/logo.png"
+        "logoUrl": "https://wasonisgood.github.io/moot-court-meet-addon/logo.png"
       }
     }
   }
