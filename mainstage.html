@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="author" content="PENG WEIXIANG" />
+<title>Moot Court Timer · 主舞台</title>
+<script src="https://www.gstatic.com/meetjs/addons/1.1.0/meet.addons.js"></script>
+<style>
+  :root{--bg:#0c0e13;--card:#151922;--ink:#efe9dc;--muted:#838a9c;--line:rgba(255,255,255,.08);--gold:#c9a45c;--warn:#e3a647;--alert:#ff5a5f;--pros:#c0664d;--def:#5f8fbb;
+    --serif:"Noto Serif TC","Songti TC","PMingLiU",Georgia,serif;--sans:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;position:relative;overflow:hidden}
+  .kicker{font-size:14px;letter-spacing:.35em;text-transform:uppercase;color:var(--gold)}
+  .label{font-family:var(--serif);font-size:clamp(22px,4vw,34px);margin:10px 0 0}
+  .status{margin-top:6px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .time{font-family:var(--serif);font-size:clamp(96px,22vw,240px);line-height:1;font-variant-numeric:tabular-nums;margin:18px 0 8px;transition:color .4s}
+  body.warn5 .time{color:var(--warn)}
+  body.warn1 .time{color:var(--alert)}
+  .pools{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap;justify-content:center}
+  .pool{--c:var(--pros);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 22px;min-width:200px}
+  .pool.d{--c:var(--def)}
+  .pl{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .pt{font-family:var(--serif);font-size:38px;color:var(--c);font-variant-numeric:tabular-nums;margin-top:4px}
+  .pbar{height:4px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+  .pbar i{display:block;height:100%;background:var(--c);transition:width .3s linear}
+  .note{position:absolute;bottom:14px;left:0;right:0;font-size:12px;color:var(--muted)}
+  #overlay{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(90vw,1000px);padding:36px 24px;border-radius:24px;background:#1b2030;border:3px solid var(--gold);font-family:var(--serif);font-size:clamp(34px,6vw,72px);line-height:1.2;box-shadow:0 30px 80px rgba(0,0,0,.7);opacity:0;pointer-events:none;transition:opacity .4s}
+  #overlay.show{opacity:1}
+  #overlay.alert{border-color:var(--alert)}
+  #msg{color:var(--alert);font-size:16px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="kicker">Moot Court · 計時</div>
+<div class="label" id="label">等待共享計時…</div>
+<div class="status" id="status">Waiting</div>
+<div class="time" id="time">--:--</div>
+<div class="pools">
+  <div class="pool" id="poolP"><div class="pl">檢方 Prosecution</div><div class="pt" id="ptP">40:00</div><div class="pbar"><i id="pbP"></i></div></div>
+  <div class="pool d" id="poolD"><div class="pl">辯方 Defense</div><div class="pt" id="ptD">40:00</div><div class="pbar"><i id="pbD"></i></div></div>
+</div>
+<div class="note" id="note"></div>
+<div id="overlay" role="alert" aria-live="assertive"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="sync.js"></script>
+<script>
+(() => {
+  "use strict";
+  const CLOUD_PROJECT_NUMBER = "1070073783084";
+  const POOL_MS = 40 * 60 * 1000;
+  const WARN_5 = 5 * 60 * 1000, WARN_1 = 60 * 1000;
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmt = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return pad(Math.floor(s / 60)) + ":" + pad(s % 60);
+  };
+  const STATUS_TEXT = { idle: "Ready", running: "Recording · Running", paused: "Paused", done: "Ended" };
+
+  const roomId = new URLSearchParams(location.search).get("room");
+  let remote = null;
+  let overlayTimer = null;
+
+  function showOverlay(text, isAlert) {
+    const o = $("overlay");
+    o.textContent = text;
+    o.classList.toggle("alert", !!isAlert);
+    o.classList.add("show");
+    clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(() => o.classList.remove("show"), 20000); // 20 秒後自動隱藏
+  }
+
+  function render() {
+    if (!remote) return;
+    const now = Date.now();
+    const status = remote.status || "idle";
+    const sRem = status === "running" ? Math.max(0, remote.endAt - now)
+               : status === "paused" ? (remote.remain || 0)
+               : (remote.remain != null ? remote.remain : (remote.total || 0));
+    $("label").textContent = remote.label || "";
+    $("status").textContent = STATUS_TEXT[status] || status;
+    $("time").textContent = fmt(sRem);
+    const active = status === "running" || status === "paused";
+    document.body.classList.toggle("warn5", active && sRem <= WARN_5 && sRem > WARN_1);
+    document.body.classList.toggle("warn1", active && sRem <= WARN_1);
+    const pools = remote.pools || { p: POOL_MS, d: POOL_MS };
+    for (const id of ["p", "d"]) {
+      const v = pools[id] != null ? pools[id] : POOL_MS;
+      $("pt" + id.toUpperCase()).textContent = fmt(v);
+      $("pb" + id.toUpperCase()).style.width = ((v / POOL_MS) * 100).toFixed(2) + "%";
+    }
+  }
+
+  async function initMeet() {
+    if (!window.meet || !window.meet.addon) {
+      $("note").textContent = "目前不在 Google Meet 中（預覽模式）";
+      return;
+    }
+    try {
+      await window.meet.addon.createAddonSession({ cloudProjectNumber: CLOUD_PROJECT_NUMBER });
+    } catch (e) {
+      $("note").textContent = "無法連接 Meet 活動";
+    }
+  }
+
+  if (!roomId) {
+    $("label").textContent = "缺少房間資訊";
+    $("status").textContent = "請從側邊面板開始共享";
+  } else {
+    window.MootSync.subscribe(roomId, {
+      onState: (data) => { remote = data; render(); },
+      onEvent: (data) => {
+        const text = window.MootSync.ALERT_TEXT[data.event] || data.eventText;
+        if (text) showOverlay(text, data.event === "timeup" || data.event === "warn1");
+      },
+    });
+    setInterval(render, 200);
+  }
+  initMeet();
+})();
+</script>
+</body>
+</html>

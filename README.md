@@ -1,49 +1,65 @@
 # Moot Court Timer — Google Meet Add-on
 
-法庭模擬計時器，以 **Google Meet 附加元件（Meet add-on）** 形式運作：Meet 會在側邊面板（side panel）以 iframe 載入本頁面。
-這是 Workspace 附加元件，不是 Chrome 擴充功能；舊的 Chrome 擴充功能版本保留在 `../meet-extension/`。
+法庭模擬計時器，以 **Google Meet 附加元件** 形式運作。側邊面板負責控制，主舞台負責大畫面顯示；主持人開始共享後，所有參與者會同步看到計時，並在 5 分鐘、1 分鐘與時間到時聽到英文語音提醒。
+
+- 線上位置：`https://wasonisgood.github.io/moot-court-meet-addon/`
+- Cloud 專案：`moot-court-meet-2026`（專案編號 `1070073783084`）
+- 同步後端：Firestore（同一專案）
 
 ## 功能
 
 - 檢方、辯方各自 **40 分鐘總時長**，段落計時時自動扣減，可單獨重設
 - 三個段落（法庭一、法庭二、反駁），時長可自訂並存在瀏覽器本機
-- 剩餘 **5 分鐘 / 1 分鐘** 以英文語音與提示音提醒，時間到自動結束
-- 可選擇錄製麥克風，結束時下載錄音檔（見下方限制）
+- **共享計時**：主持人按「開始共享計時」後，主舞台與所有參與者的面板同步顯示剩餘時間與雙方時長
+- **共享提醒**：剩 5 分鐘、1 分鐘與時間到時，每位參與者的畫面會顯示提醒並播放英文語音；提醒畫面 **20 秒後自動隱藏**
+- 主持人可選擇錄製自己的麥克風（預設關閉）；結束時下載錄音檔
+
+## 參與者需要做什麼
+
+什麼都不用設定。主持人開始共享後，參與者會收到「加入活動」的提示；若還沒安裝附加元件，依提示安裝即可。參與者的面板為唯讀，只顯示共享狀態。
+
+## 運作方式
+
+```
+主持人側邊面板 ──寫入── Firestore rooms/{房間ID} ──即時訂閱──┬── 參與者側邊面板（唯讀、播放聲音）
+                                                            └── 主舞台（大畫面、播放聲音）
+```
+
+- 房間 ID 是隨機 UUID，由主持人產生，放在 Meet 活動的啟動資料（`additionalData`）中，只有參與該活動的人會拿到。
+- 聲音只會在每位參與者的裝置播放，不會經過 Meet 音訊，所以主持人不需要開麥。
+- 同一位參與者的側邊面板與主舞台共用 `localStorage`，用 `seq` 去重，確保同一提醒只播放一次。
 
 ## 檔案
 
 | 檔案 | 說明 |
 | --- | --- |
-| `index.html` | 側邊面板頁面（樣式內嵌，載入 Meet Add-ons SDK） |
-| `app.js` | 計時邏輯、SDK 初始化、麥克風錄音 |
-| `manifest.json` | 部署用的附加元件清單範本（HTTP 部署時貼到 Cloud console） |
+| `index.html` | 側邊面板（主持人控制、參與者唯讀） |
+| `mainstage.html` | 主舞台大畫面（`?room=` 參數帶入房間 ID） |
+| `app.js` | 計時邏輯、共享狀態發布與模式切換 |
+| `sync.js` | Firestore 發布／訂閱、聲音去重、語音與提示音 |
+| `manifest.json` | 附加元件清單（部署時使用） |
+| `firestore.rules` | Firestore 安全規則 |
+| `firebase.json`、`.firebaserc` | Firebase CLI 設定（僅部署規則用） |
 
-沒有建置步驟，純 HTML／JS，任何 HTTPS 靜態主機都可以。
+## 更新部署
 
-## 部署步驟
+1. 修改程式後提交並推送到 `main`，GitHub Pages 會自動更新（約 1 分鐘）。
+2. 只改前端程式時，不需要重新安裝附加元件。
+3. 修改 `manifest.json` 的欄位時，需要重新執行：
+   ```
+   gcloud workspace-add-ons deployments replace moot-court-timer --deployment-file=manifest.json --project=moot-court-meet-2026
+   ```
+4. 修改 `firestore.rules` 時：`firebase deploy --only firestore:rules --project moot-court-meet-2026`
 
-依照官方指南（[快速入門](https://developers.google.com/workspace/meet/add-ons/guides/quickstart?hl=zh-tw)、部署指南）：
+## 安全性與限制
 
-1. **把檔案放到 HTTPS 網站**：例如 GitHub Pages 或 Firebase Hosting，確認能開啟 `https://你的網址/meet-addon/index.html`。
-2. **建立 Google Cloud 專案**，記下「專案編號」（Project number）。
-3. **啟用 API**：在 Cloud console 啟用「Google Workspace Marketplace SDK」與「Google Workspace Add-ons API」。注意不要啟用名稱相近的「Google Workspace Marketplace API」。
-4. **設定 `app.js`**：把 `CLOUD_PROJECT_NUMBER` 換成第 2 步的專案編號。
-5. **設定 `manifest.json`**：把所有 `YOUR-HOST` 換成你的網域，並準備 `logo.png`。
-6. **建立部署**：Marketplace SDK 頁面 → 「HTTP deployments」→「Create new deployment」，貼上清單 JSON；在「App configuration」選擇「Google Workspace add-on」與「Deploy using cloud deployment resource」。
-7. **安裝測試**：在「HTTP deployments」點該部署的「Install」（以目前登入的帳號安裝）。
-8. **在 Meet 中使用**：開啟 meet.google.com 開會，點會議工具（活動面板）中的此附加元件即可。
-
-> 上述清單欄位與步驟來自官方文件摘要；正式部署前請對照最新的部署指南確認欄位名稱。
-
-## 限制（請先閱讀）
-
-- **無法錄到其他參與者的聲音。** 附加元件 SDK 目前文件中只提到畫面共享（`supportsScreenSharing`），沒有提供會議音訊或分頁音訊的存取。因此這個版本只能錄你自己的麥克風。
-- 若要錄會議中所有人的發言，需要改用其他方式（例如 Meet 本身的錄影／逐字稿功能，或另外的媒體 API），這些都不在本附加元件的範圍內。
-- 麥克風錄音是在 iframe 中用 `getUserMedia` 取得的，Meet 是否允許此 iframe 使用麥克風**尚未實測**；若不允許，程式會顯示「無法錄音，僅計時」並照常計時。
-- 段落進行中若關閉側邊面板，計時與錄音都會中斷。
-- 時長與雙方剩餘時間存在 `localStorage`，同一瀏覽器內保留；換裝置不會同步。
-- 尚未在真實 Meet 會議中測試。只做過 JavaScript 語法檢查與清單 JSON 格式檢查。
+- **Firestore 規則沒有登入機制**：任何知道房間 ID（36 字元 UUID）的人都能讀寫該房間。房間 ID 只存在於 Meet 活動的啟動資料中，外人無法得知，但這不是嚴格的身分驗證。規則同時限制欄位名稱與長度，且禁止刪除。
+- 房間資料會留在 Firestore 中，目前沒有自動清除機制。
+- 主舞台能否由程式關閉，官方文件沒有說明；本實作只讓提醒畫面 20 秒後自動隱藏，主舞台本身不會被關閉。
+- 每位參與者的聲音由各自裝置播放，音量取決於該裝置；若參與者靜音或使用耳機，聽不到提醒，畫面提醒仍會顯示。
+- 活動中途重新整理側邊面板的主持人，會變成唯讀參與者，需要重新開始共享。
+- 尚未在真實 Meet 會議中，以多人測試過聲音去重與主舞台顯示。
 
 ## 本機預覽
 
-直接用瀏覽器開啟 `index.html` 即可測試計時功能；頁面上會出現「目前不在 Google Meet 中」的提示，這是正常的。
+直接開啟 `index.html` 或 `mainstage.html?room=測試` 可測試畫面，但共享功能需要在 Meet 中才會啟動。

@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 房間 ID 為隨機 UUID（36 字元），只透過 Meet 活動的啟動資料分享，不需要登入。
+    match /rooms/{roomId} {
+      allow read: if roomId.size() >= 24;
+      allow create, update: if roomId.size() >= 24
+        && request.resource.data.keys().hasOnly(['seq','status','endAt','remain','total','label','event','eventText','pools','ts'])
+        && request.resource.data.seq is int
+        && (request.resource.data.event is string) && request.resource.data.event.size() <= 20
+        && (request.resource.data.eventText is string) && request.resource.data.eventText.size() <= 120;
+      allow delete: if false;
+    }
+  }
+}
