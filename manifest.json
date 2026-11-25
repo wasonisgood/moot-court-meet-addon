@@ -1,0 +1,20 @@
+{
+  "addOns": {
+    "common": {
+      "name": "Moot Court Timer",
+      "logoUrl": "https://YOUR-HOST/meet-addon/logo.png",
+      "layoutProperties": {
+        "primaryColor": "#c9a45c",
+        "secondaryColor": "#0c0e13"
+      }
+    },
+    "meet": {
+      "web": {
+        "sidePanelUrl": "https://YOUR-HOST/meet-addon/index.html",
+        "addOnOrigins": ["https://YOUR-HOST"],
+        "supportsScreenSharing": false,
+        "logoUrl": "https://YOUR-HOST/meet-addon/logo.png"
+      }
+    }
+  }
+}

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="author" content="PENG WEIXIANG" />
+<title>Moot Court Timer</title>
+<!-- Google Meet Add-ons SDK (exposes window.meet.addon). Pin the version you test against. -->
+<script src="https://www.gstatic.com/meetjs/addons/1.1.0/meet.addons.js"></script>
+<style>
+  :root{--bg:#0c0e13;--card:#151922;--ink:#efe9dc;--muted:#838a9c;--line:rgba(255,255,255,.08);--gold:#c9a45c;--warn:#e3a647;--alert:#ff5a5f;--pros:#c0664d;--def:#5f8fbb;
+    --serif:"Noto Serif TC","Songti TC","PMingLiU",Georgia,serif;--sans:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px 12px 28px;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.4}
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+  button:disabled{opacity:.3;cursor:not-allowed}
+  header{margin-bottom:12px}
+  .kicker{font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--gold)}
+  h1{margin:4px 0 0;font-family:var(--serif);font-weight:500;font-size:19px;letter-spacing:.05em}
+  #envNote{display:none;margin-top:8px;padding:8px 10px;border-radius:10px;background:#1b2030;color:var(--muted);font-size:11.5px}
+  #envNote.show{display:block}
+
+  .pools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+  .pool{--c:var(--pros);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px 10px;text-align:left}
+  .pool.d{--c:var(--def)}
+  .pool.sel{border-color:var(--c)}
+  .pl{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+  .pt{font-family:var(--serif);font-size:22px;color:var(--c);font-variant-numeric:tabular-nums;margin-top:2px}
+  .pbar{height:3px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:6px}
+  .pbar i{display:block;height:100%;width:100%;background:var(--c);transition:width .3s linear}
+  .pool-reset{margin-top:6px;font-size:10.5px;color:var(--gold)}
+
+  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+  .tab{padding:7px 4px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted);font-size:12px}
+  .tab.on{background:var(--ink);color:#15120c;font-weight:600;box-shadow:none}
+  .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:7px 8px 7px 10px;margin-bottom:5px;border-radius:12px;border-left:3px solid transparent;background:rgba(255,255,255,.02)}
+  .row.on{background:rgba(201,164,92,.12);border-left-color:var(--gold)}
+  .pick{text-align:left}
+  .pick .zh{font-family:var(--serif);font-size:14px}
+  .pick .en{font-size:9.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+  .dur{display:flex;align-items:center;gap:3px;font-family:var(--serif);color:var(--muted)}
+  .dur input{width:40px;background:transparent;border:0;border-bottom:1px solid rgba(255,255,255,.15);color:var(--ink);font:inherit;font-size:16px;text-align:center;padding:2px 0;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .dur input::-webkit-outer-spin-button,.dur input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .dur input:focus{outline:none;border-bottom-color:var(--gold)}
+  .dur input:disabled{opacity:.4}
+
+  .stage{--c:var(--gold);text-align:center;margin:14px 0 8px}
+  .stage.p{--c:var(--pros)} .stage.d{--c:var(--def)}
+  .seg-title{display:flex;justify-content:center;align-items:center;gap:10px;font-size:12px;color:var(--muted);letter-spacing:.06em}
+  .rec{display:none;align-items:center;gap:5px;color:var(--alert);font-size:10px;letter-spacing:.15em;font-weight:600}
+  .rec.on{display:inline-flex}
+  .rec i{width:6px;height:6px;border-radius:50%;background:var(--alert);animation:blink 1.1s steps(2,start) infinite}
+  .ringw{position:relative;width:200px;height:200px;margin:8px auto}
+  .ringw svg{width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+  .ringw circle{fill:none}
+  .track{stroke:rgba(255,255,255,.06);stroke-width:5}
+  .bar{stroke:var(--c);stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .25s linear,stroke .5s ease}
+  .clock{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center}
+  .time{font-family:var(--serif);font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+  .status{margin-top:8px;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .stage.warn5 .time{color:var(--warn)} .stage.warn5 .bar{stroke:var(--warn)}
+  .stage.warn1 .time{color:var(--alert)} .stage.warn1 .bar{stroke:var(--alert);animation:pulse 1s ease-in-out infinite}
+  .controls{display:flex;gap:8px;justify-content:center}
+  .btn{border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600}
+  .btn.main{background:var(--ink);color:#15120c;min-width:120px}
+  .btn.end{box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .btn.end:not(:disabled):hover{color:var(--alert);box-shadow:inset 0 0 0 1px var(--alert)}
+
+  .opts{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--muted)}
+  .opts label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .log-card{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px}
+  .log-h{font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+  .log{list-style:none;margin:0;padding:0;max-height:180px;overflow:auto}
+  .log li{padding:7px 2px;border-bottom:1px solid var(--line)}
+  .log li:last-child{border-bottom:0}
+  .lt{font-family:var(--serif);font-size:13px}
+  .ls{color:var(--muted);font-size:11px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .le{color:var(--alert);font-size:11px;margin-top:2px}
+  .log .empty{color:var(--muted);text-align:center;padding:10px 0}
+
+  #toast{position:fixed;left:12px;right:12px;bottom:12px;background:#1b2030;border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:12px;text-align:center;opacity:0;transition:opacity .3s;pointer-events:none}
+  #toast.show{opacity:1}
+  @keyframes blink{50%{opacity:.15}}
+  @keyframes pulse{50%{opacity:.4}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">Moot Court · Timer &amp; Recorder</div>
+  <h1>法庭模擬計時錄音</h1>
+  <div id="envNote">目前不在 Google Meet 中，計時功能仍可使用。 · Not running inside Meet; timer works standalone.</div>
+</header>
+
+<section class="pools">
+  <button class="pool" id="poolP" data-side="p" type="button">
+    <div class="pl"><span>檢方 Pros.</span><span>剩餘</span></div>
+    <div class="pt" id="ptP">40:00</div>
+    <div class="pbar"><i id="pbP"></i></div>
+  </button>
+  <button class="pool d" id="poolD" data-side="d" type="button">
+    <div class="pl"><span>辯方 Def.</span><span>剩餘</span></div>
+    <div class="pt" id="ptD">40:00</div>
+    <div class="pbar"><i id="pbD"></i></div>
+  </button>
+</section>
+<div class="pools" style="margin-top:-4px">
+  <button class="pool-reset" data-reset="p" type="button" style="background:none;border:0;text-align:left">重設檢方 40:00</button>
+  <button class="pool-reset" data-reset="d" type="button" style="background:none;border:0;text-align:right">重設辯方 40:00</button>
+</div>
+
+<div class="tabs">
+  <button class="tab" data-side="p" type="button">檢方 Prosecution</button>
+  <button class="tab" data-side="d" type="button">辯方 Defense</button>
+</div>
+<div id="rows"></div>
+
+<section class="stage" id="stage">
+  <div class="seg-title"><span id="segTitle"></span><span class="rec" id="recInd"><i></i>REC</span></div>
+  <div class="ringw">
+    <svg viewBox="0 0 300 300" aria-hidden="true">
+      <circle class="track" cx="150" cy="150" r="136"></circle>
+      <circle class="bar" id="bar" cx="150" cy="150" r="136"></circle>
+    </svg>
+    <div class="clock">
+      <div class="time" id="time">15:00</div>
+      <div class="status" id="status">Ready</div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn main" id="play" type="button">開始 Start</button>
+    <button class="btn end" id="end" type="button" disabled>結束 End</button>
+  </div>
+</section>
+
+<div class="opts">
+  <label><input type="checkbox" id="mic"> 錄製麥克風 · Record mic</label>
+</div>
+
+<section class="log-card">
+  <div class="log-h">錄音紀錄 · Recordings</div>
+  <ul class="log" id="log"></ul>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
